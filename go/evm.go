@@ -52,12 +52,19 @@ func Evm(code []byte) ([]*big.Int, bool) {
 			z := wrap(new(big.Int).Mul(a, b))
 			stack = push(stack, z)
 		case 0x03: //SUb
-			stack, a,b = pop2(stack)
+			stack, a, b = pop2(stack)
 			z := wrap(new(big.Int).Sub(a, b))
-			stack = push(stack,z)
+			stack = push(stack, z)
+		case 0x04: //DIV
+			stack, a, b = pop2(stack)
+			var z *big.Int
+			if b.Cmp(big.NewInt(0)) == 0 {
+				z = b;
+			}else{
+			z = wrap(new(big.Int).Div(a, b))}
+			stack = push(stack, z)
 		}
 	}
-
 	return reverse(stack), true
 }
 
@@ -94,8 +101,9 @@ func wrap(z *big.Int) *big.Int {
 	if bits > 256 {
 		z = new(big.Int).And(z, maxUint256)
 	}
-	if z.Cmp(big.NewInt(0)) == -1{
+	if z.Cmp(big.NewInt(0)) == -1 {
 		a := new(big.Int).Add(maxUint256, big.NewInt(1))
-		z = new(big.Int).Add(a,z)}
+		z = new(big.Int).Add(a, z)
+	}
 	return z
 }

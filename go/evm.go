@@ -17,7 +17,7 @@ import (
 var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1)) // max value of uint256
 // Run runs the EVM code and returns the stack and a success indicator.
 func Evm(code []byte) ([]*big.Int, bool) {
-	var a, b *big.Int // For top 2 values always
+	var a, b, c *big.Int // For top 2 values always
 
 	var stack []*big.Int
 	pc := 0
@@ -59,9 +59,25 @@ func Evm(code []byte) ([]*big.Int, bool) {
 			stack, a, b = pop2(stack)
 			var z *big.Int
 			if b.Cmp(big.NewInt(0)) == 0 {
-				z = b;
-			}else{
-			z = wrap(new(big.Int).Div(a, b))}
+				z = b
+			} else {
+				z = wrap(new(big.Int).Div(a, b))
+			}
+			stack = push(stack, z)
+		case 0x06: //MOD
+			stack, a, b = pop2(stack)
+			z := MOD(a,b)
+			stack = push(stack, z)
+
+		case 0x08: //ADDMOD
+			stack, a, b, c = pop3(stack)
+			sum := wrap(new(big.Int).Add(a, b))
+			z := MOD(sum,c)
+			stack = push(stack, z)
+		case 0x09: //MULMOD
+			stack, a, b, c = pop3(stack)
+			product := (new(big.Int).Mul(a, b))
+			z := MOD(product,c)
 			stack = push(stack, z)
 		}
 	}
@@ -104,6 +120,24 @@ func wrap(z *big.Int) *big.Int {
 	if z.Cmp(big.NewInt(0)) == -1 {
 		a := new(big.Int).Add(maxUint256, big.NewInt(1))
 		z = new(big.Int).Add(a, z)
+	}
+	return z
+}
+
+func pop3(stack []*big.Int) ([]*big.Int, *big.Int, *big.Int, *big.Int) {
+	var a, b, c *big.Int
+	stack, a = pop(stack)
+	stack, b = pop(stack)
+	stack, c = pop(stack)
+	return stack, a, b, c
+}
+
+func MOD(a *big.Int, b *big.Int) *big.Int {
+	var z *big.Int
+	if b.Cmp(big.NewInt(0)) == 0 {
+		z = b
+	} else {
+		z = wrap(new(big.Int).Mod(a, b))
 	}
 	return z
 }

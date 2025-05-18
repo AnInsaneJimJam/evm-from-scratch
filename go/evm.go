@@ -14,9 +14,10 @@ import (
 	"math/big"
 )
 
+var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1)) // max value of uint256
 // Run runs the EVM code and returns the stack and a success indicator.
 func Evm(code []byte) ([]*big.Int, bool) {
-	var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1)) // max value of uint256
+	var a, b *big.Int // For top 2 values always
 
 	var stack []*big.Int
 	pc := 0
@@ -42,18 +43,21 @@ func Evm(code []byte) ([]*big.Int, bool) {
 			stack = push(stack, big.NewInt(0))
 		case 0x50: // POP
 			stack, _ = pop(stack)
-		case 0x01:
-			var a, b *big.Int
-			stack, a = pop(stack)
-			stack, b = pop(stack)
-			z := new(big.Int).Add(a, b)
-			bits := z.BitLen()
-			if bits > 256 {
-				z = new(big.Int).And(z, maxUint256)
-			}
+		case 0x01: //ADD
+			stack, a, b = pop2(stack)
+			z := wrap(new(big.Int).Add(a, b))
 			stack = push(stack, z)
+		case 0x02: //MUL
+			stack, a, b = pop2(stack)
+			z := wrap(new(big.Int).Mul(a, b))
+			stack = push(stack, z)
+		case 0x03: //SUb
+			stack, a,b = pop2(stack)
+			z := wrap(new(big.Int).Sub(a, b))
+			stack = push(stack,z)
 		}
 	}
+
 	return reverse(stack), true
 }
 
@@ -76,4 +80,22 @@ func pop(stack []*big.Int) ([]*big.Int, *big.Int) {
 func push(stack []*big.Int, elem *big.Int) []*big.Int {
 	stack = append(stack, elem)
 	return stack
+}
+
+func pop2(stack []*big.Int) ([]*big.Int, *big.Int, *big.Int) {
+	var a, b *big.Int
+	stack, a = pop(stack)
+	stack, b = pop(stack)
+	return stack, a, b
+}
+
+func wrap(z *big.Int) *big.Int {
+	bits := z.BitLen()
+	if bits > 256 {
+		z = new(big.Int).And(z, maxUint256)
+	}
+	if z.Cmp(big.NewInt(0)) == -1{
+		a := new(big.Int).Add(maxUint256, big.NewInt(1))
+		z = new(big.Int).Add(a,z)}
+	return z
 }

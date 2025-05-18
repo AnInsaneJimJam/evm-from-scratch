@@ -16,6 +16,8 @@ import (
 
 // Run runs the EVM code and returns the stack and a success indicator.
 func Evm(code []byte) ([]*big.Int, bool) {
+	var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1)) // max value of uint256
+
 	var stack []*big.Int
 	pc := 0
 
@@ -40,6 +42,16 @@ func Evm(code []byte) ([]*big.Int, bool) {
 			stack = push(stack, big.NewInt(0))
 		case 0x50: // POP
 			stack, _ = pop(stack)
+		case 0x01:
+			var a, b *big.Int
+			stack, a = pop(stack)
+			stack, b = pop(stack)
+			z := new(big.Int).Add(a, b)
+			bits := z.BitLen()
+			if bits > 256 {
+				z = new(big.Int).And(z, maxUint256)
+			}
+			stack = push(stack, z)
 		}
 	}
 	return reverse(stack), true

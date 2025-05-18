@@ -23,9 +23,45 @@ func Evm(code []byte) ([]*big.Int, bool) {
 		op := code[pc]
 		pc++
 
-		// TODO: Implement the EVM here!
-		_ = op // delete this; it's only here to make the compiler think you're already using `op`
+		if op >= 0x60 && op <= 0x7f { // All PUSH => PUSH1 .... PUSH32
+			num := int(op - 0x60)
+			if pc >= (len(code) - num) {
+				return reverse(stack), false
+			}
+			value := new(big.Int).SetBytes(code[pc : pc+num+1]) // Big-endian
+			stack = push(stack, value)
+			pc += num + 1
+			continue
+		}
+		switch op {
+		case 0x00: // STOP
+			return stack, true
+		case 0x5f: // PUSH0
+			stack = push(stack, big.NewInt(0))
+		case 0x50: // POP
+			stack, _ = pop(stack)
+		}
 	}
+	return reverse(stack), true
+}
 
-	return stack, true
+func reverse(stack []*big.Int) []*big.Int {
+	n := len(stack)
+	out := make([]*big.Int, n)
+	for i := 0; i < n; i++ {
+		out[i] = stack[n-1-i]
+	}
+	return out
+}
+
+func pop(stack []*big.Int) ([]*big.Int, *big.Int) {
+	n := len(stack)
+	elem := stack[n-1]
+	out := stack[0 : n-1]
+	return out, elem
+}
+
+func push(stack []*big.Int, elem *big.Int) []*big.Int {
+	stack = append(stack, elem)
+	return stack
 }

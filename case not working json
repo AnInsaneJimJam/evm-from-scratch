@@ -1,0 +1,17 @@
+
+
+// {
+  //   "name": "SMOD (negative)",
+  //   "hint": "Read \"Negative Numbers\" section of the course learning materials. -10 mod -3 = -1",
+  //   "code": {
+  //     "asm": "PUSH32 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd\nPUSH32 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8\nSMOD",
+  //     "bin": "7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff807"
+  //   },
+  //   "expect": {
+  //     "stack": [
+  //       "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe"
+  //     ],
+  //     "success": true
+  //   }
+  // },
+before SDIV by zero

@@ -15,6 +15,7 @@ import (
 )
 
 var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1)) // max value of uint256
+var power256 = new(big.Int).Lsh(big.NewInt(1), 256)                                    // max value of uint256
 // Run runs the EVM code and returns the stack and a success indicator.
 func Evm(code []byte) ([]*big.Int, bool) {
 	var a, b, c *big.Int // For top 2 values always
@@ -66,21 +67,115 @@ func Evm(code []byte) ([]*big.Int, bool) {
 			stack = push(stack, z)
 		case 0x06: //MOD
 			stack, a, b = pop2(stack)
-			z := MOD(a,b)
+			z := MOD(a, b)
 			stack = push(stack, z)
 
 		case 0x08: //ADDMOD
 			stack, a, b, c = pop3(stack)
 			sum := wrap(new(big.Int).Add(a, b))
-			z := MOD(sum,c)
+			z := MOD(sum, c)
 			stack = push(stack, z)
 		case 0x09: //MULMOD
 			stack, a, b, c = pop3(stack)
 			product := (new(big.Int).Mul(a, b))
-			z := MOD(product,c)
+			z := MOD(product, c)
 			stack = push(stack, z)
+		case 0x0a: //EXP
+			stack, a, b = pop2(stack)
+			z := new(big.Int).Exp(a, b, power256)
+			stack = push(stack, z)
+		case 0x0b: // SIGNEXTEND
+			stack, a, b = pop2(stack)
+
+			// If a >= 32 then there's no change
+			if a.Cmp(big.NewInt(31)) >= 0 {
+				stack = push(stack, b)
+				continue
+			}
+
+			// The bit position to sign extend from is (a+1)*8-1
+			signBitPos := new(big.Int).Mul(new(big.Int).Add(a, big.NewInt(1)), big.NewInt(8))
+			signBitPos = new(big.Int).Sub(signBitPos, big.NewInt(1))
+
+			// Check if the sign bit is set
+			if b.Bit(int(signBitPos.Int64())) == 1 {
+				// The sign bit is 1, so set all higher bits to 1
+				mask := new(big.Int).Lsh(big.NewInt(1), uint(signBitPos.Uint64()+1))
+				mask = new(big.Int).Sub(mask, big.NewInt(1))
+				mask = new(big.Int).Not(mask)
+
+				// Apply mask to set all higher bits to 1
+				b = wrap(new(big.Int).Or(b, mask))
+			} else {
+				// The sign bit is 0, so clear all higher bits
+				mask := new(big.Int).Lsh(big.NewInt(1), uint(signBitPos.Uint64()+1))
+				mask = new(big.Int).Sub(mask, big.NewInt(1))
+
+				// Apply mask to clear all higher bits
+				b = wrap(new(big.Int).And(b, mask))
+			}
+
+			stack = push(stack, b)
+		case 0x05: // SDIV
+			stack, a, b = pop2(stack)
+			z := SDIV(a, b)
+			stack = push(stack, wrap(z))
+		case 0x07: // SMOD
+			stack, a, b = pop2(stack)
+			var z *big.Int
+			if b.Cmp(big.NewInt(0)) == 0 {
+				z = b
+			} else {
+				z = SDIV(a, b)                                             // a//b
+				z = new(big.Int).Sub(normalise(a), new(big.Int).Mul(z, b)) // a - b(a//b)
+			}
+			stack = push(stack, wrap(z))
+		case 0x10: // LT (a<b ==> 1 )
+			stack, a, b = pop2(stack)
+			if a.Cmp(b) == -1 {
+				stack = push(stack, big.NewInt(1))
+			} else {
+				stack = push(stack, big.NewInt(0))
+			}
+		case 0x11: // GT (a>b ==> 1 )
+			stack, a, b = pop2(stack)
+			if a.Cmp(b) == 1 {
+				stack = push(stack, big.NewInt(1))
+			} else {
+				stack = push(stack, big.NewInt(0))
+			}
+		case 0x12: // SLT (a<b ==> 1 )
+			stack, a, b = pop2(stack)
+			if normalise(a).Cmp(normalise(b)) == -1 {
+				stack = push(stack, big.NewInt(1))
+			} else {
+				stack = push(stack, big.NewInt(0))
+			}
+		case 0x13: // GT (a>b ==> 1 )
+			stack, a, b = pop2(stack)
+			if normalise(a).Cmp(normalise(b)) == 1 {
+				stack = push(stack, big.NewInt(1))
+			} else {
+				stack = push(stack, big.NewInt(0))
+			}
+		case 0x14: // EQ (a=b ==> 1 )
+			stack, a, b = pop2(stack)
+			if normalise(a).Cmp(normalise(b)) == 0 {
+				stack = push(stack, big.NewInt(1))
+			} else {
+				stack = push(stack, big.NewInt(0))
+			}
+		case 0x15: // ISZERO 
+			stack, a= pop(stack)
+			if a.Cmp(big.NewInt(0)) == 0 {
+				stack = push(stack, big.NewInt(1))
+			} else {
+				stack = push(stack, big.NewInt(0))
+			}
 		}
+
 	}
+
 	return reverse(stack), true
 }
 
@@ -138,6 +233,29 @@ func MOD(a *big.Int, b *big.Int) *big.Int {
 		z = b
 	} else {
 		z = wrap(new(big.Int).Mod(a, b))
+	}
+	return z
+}
+
+func bitcut(b *big.Int, bitpos *big.Int) *big.Int {
+	b = new(big.Int).Lsh(b, uint(256-bitpos.Uint64()))
+	b = new(big.Int).Rsh(b, uint(256-bitpos.Uint64()))
+	return b
+}
+
+func normalise(a *big.Int) *big.Int {
+	if a.Bit(255) == 1 {
+		return new(big.Int).Mul(new(big.Int).Sub(power256, a), big.NewInt(-1))
+	}
+	return a
+}
+
+func SDIV(a *big.Int, b *big.Int) *big.Int {
+	z := new(big.Int)
+	if b.Cmp(big.NewInt(0)) == 0 {
+		z = b
+	} else {
+		z = new(big.Int).Div(normalise(a), normalise(b))
 	}
 	return z
 }
